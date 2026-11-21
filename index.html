@@ -1,0 +1,260 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Health Record</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;margin:0;background:#f1f5f9;color:#243247}
+header{background:#176b70;color:white;padding:22px 16px;text-align:center}
+header h1{margin:0;font-size:25px}
+header p{margin:7px 0 0}
+main{padding:14px;max-width:700px;margin:auto}
+.card{background:white;padding:16px;margin-bottom:14px;border-radius:12px;box-shadow:0 2px 7px #0001}
+h2{font-size:19px;margin:0 0 14px;color:#176b70}
+label{display:block;font-size:14px;margin:10px 0 5px}
+input,select,button{font:inherit}
+input,select{width:100%;padding:11px;border:1px solid #ccd4dc;border-radius:7px;background:white}
+button{border:0;border-radius:7px;padding:12px;background:#176b70;color:white;font-weight:bold;cursor:pointer}
+button.delete{background:#a33;padding:7px 10px;font-size:12px}
+button.secondary{background:#526477}
+button.add{width:100%;margin-top:14px}
+.record{padding:11px 0;border-bottom:1px solid #e4e9ee}
+.record:last-child{border:0}
+.small{font-size:13px;color:#64748b}
+nav{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+nav button{flex:1;min-width:90px;padding:10px 5px;font-size:13px}
+canvas{width:100%;height:220px}
+.stat{font-size:25px;font-weight:bold;color:#176b70}
+@media print{
+nav,.no-print,button{display:none!important}
+body{background:white}
+.card{box-shadow:none;border:1px solid #ddd;break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header>
+<h1>My Health Record</h1>
+<p>Your personal health diary</p>
+</header>
+<main>
+<nav class="no-print">
+<button onclick="show('bp')">Blood Pressure</button>
+<button onclick="show('med')">Medication</button>
+<button onclick="show('labs')">Blood Tests</button>
+<button onclick="show('report')">Reports</button>
+</nav>
+
+<section id="bp" class="page">
+<div class="card">
+<h2>Blood Pressure</h2>
+<label>Date and time</label>
+<input id="bpdate" type="datetime-local">
+<label>Systolic (upper number)</label>
+<input id="sys" type="number" placeholder="e.g. 130">
+<label>Diastolic (lower number)</label>
+<input id="dia" type="number" placeholder="e.g. 80">
+<label>Pulse (beats per minute)</label>
+<input id="pulse" type="number" placeholder="e.g. 70">
+<button class="add" onclick="addBP()">Save blood pressure</button>
+</div>
+<div class="card">
+<h2>Blood Pressure History</h2>
+<canvas id="chart" width="600" height="240"></canvas>
+<div id="bpList"></div>
+</div>
+</section>
+
+<section id="med" class="page" hidden>
+<div class="card">
+<h2>Medication Record</h2>
+<label>Medication name</label>
+<input id="medname" placeholder="Medication name">
+<label>Dosage</label>
+<input id="dose" placeholder="e.g. 5 mg">
+<label>Time taken</label>
+<input id="medtime" placeholder="e.g. 08:00">
+<label>Notes</label>
+<input id="mednote" placeholder="Optional notes">
+<button class="add" onclick="addMed()">Save medication</button>
+</div>
+<div class="card">
+<h2>My Medication</h2>
+<div id="medList"></div>
+</div>
+</section>
+
+<section id="labs" class="page" hidden>
+<div class="card">
+<h2>Blood Test Results</h2>
+<label>Date of test</label>
+<input id="labdate" type="date">
+<label>Test name</label>
+<select id="test">
+<option>Urea</option>
+<option>Creatinine</option>
+<option>eGFR</option>
+<option>Sodium</option>
+<option>Potassium</option>
+<option>Chloride</option>
+<option>Bicarbonate</option>
+<option>Other</option>
+</select>
+<label>Result</label>
+<input id="result" placeholder="Enter result">
+<label>Units</label>
+<input id="units" placeholder="e.g. mmol/L">
+<label>Laboratory reference range</label>
+<input id="range" placeholder="As shown on your report">
+<label>Notes</label>
+<input id="labnote" placeholder="Optional">
+<button class="add" onclick="addLab()">Save blood result</button>
+</div>
+<div class="card">
+<h2>Blood Test History</h2>
+<div id="labList"></div>
+</div>
+</section>
+
+<section id="report" class="page" hidden>
+<div class="card">
+<h2>My Health Summary</h2>
+<p>Blood pressure readings: <span class="stat" id="bpCount">0</span></p>
+<p>Medication entries: <span class="stat" id="medCount">0</span></p>
+<p>Blood test results: <span class="stat" id="labCount">0</span></p>
+<button class="add" onclick="window.print()">Print / Save as PDF</button>
+<p class="small">Choose "Save as PDF" in your phone's print options to create a PDF report.</p>
+</div>
+<div class="card"><h2>Blood Pressure Records</h2><div id="reportBP"></div></div>
+<div class="card"><h2>Medication Records</h2><div id="reportMed"></div></div>
+<div class="card"><h2>Blood Test Records</h2><div id="reportLab"></div></div>
+<div class="card small">
+Your information is stored in this browser on this device. It is not automatically backed up or sent to a doctor. Keep a separate backup of important records.
+</div>
+</section>
+</main>
+
+<script>
+const getData=(key)=>JSON.parse(localStorage.getItem(key)||"[]");
+const saveData=(key,data)=>localStorage.setItem(key,JSON.stringify(data));
+let bp=getData("healthBP"),med=getData("healthMed"),labs=getData("healthLabs");
+
+function todayDate(){
+return new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+document.getElementById("bpdate").value=todayDate();
+document.getElementById("labdate").value=todayDate().slice(0,10);
+
+function show(id){
+document.querySelectorAll(".page").forEach(p=>p.hidden=true);
+document.getElementById(id).hidden=false;
+render();
+}
+
+function addBP(){
+let s=Number(sys.value),d=Number(dia.value),p=pulse.value;
+if(!s||!d||s<50||s>300||d<30||d>200){
+alert("Please enter valid blood pressure numbers.");return;
+}
+bp.push({date:bpdate.value,s,d,p});
+saveData("healthBP",bp);
+sys.value=dia.value=pulse.value="";
+render();
+alert("Blood pressure saved.");
+}
+
+function addMed(){
+if(!medname.value.trim()){alert("Enter medication name.");return;}
+med.push({name:medname.value,dose:dose.value,time:medtime.value,note:mednote.value,date:todayDate()});
+saveData("healthMed",med);
+medname.value=dose.value=medtime.value=mednote.value="";
+render();
+alert("Medication saved.");
+}
+
+function addLab(){
+if(!result.value.trim()){alert("Enter a test result.");return;}
+labs.push({date:labdate.value,test:test.value,result:result.value,units:units.value,range:range.value,note:labnote.value});
+saveData("healthLabs",labs);
+result.value=units.value=range.value=labnote.value="";
+render();
+alert("Blood test saved.");
+}
+
+function removeItem(key,index){
+if(!confirm("Delete this record?"))return;
+if(key==="bp"){bp.splice(index,1);saveData("healthBP",bp);}
+if(key==="med"){med.splice(index,1);saveData("healthMed",med);}
+if(key==="labs"){labs.splice(index,1);saveData("healthLabs",labs);}
+render();
+}
+
+function formatDate(v){
+return v?new Date(v).toLocaleString():"Date not entered";
+}
+
+function render(){
+bpList.innerHTML=bp.length?bp.map((x,i)=>`
+<div class="record"><b>${formatDate(x.date)}</b><br>
+${x.s}/${x.d} mmHg &nbsp; Pulse: ${x.p||"Not entered"}
+<br><button class="delete no-print" onclick="removeItem('bp',${i})">Delete</button></div>`).reverse().join(""):"No readings recorded yet.";
+
+medList.innerHTML=med.length?med.map((x,i)=>`
+<div class="record"><b>${x.name}</b><br>${x.dose} &nbsp; ${x.time}<br>
+${x.note||""}<br><button class="delete no-print" onclick="removeItem('med',${i})">Delete</button></div>`).reverse().join(""):"No medication recorded.";
+
+labList.innerHTML=labs.length?labs.map((x,i)=>`
+<div class="record"><b>${x.test}</b> – ${x.result} ${x.units}<br>
+${x.date} | Reference: ${x.range||"Not entered"}<br>${x.note||""}<br>
+<button class="delete no-print" onclick="removeItem('labs',${i})">Delete</button></div>`).reverse().join(""):"No blood tests recorded.";
+
+bpCount.textContent=bp.length;
+medCount.textContent=med.length;
+labCount.textContent=labs.length;
+
+reportBP.innerHTML=bpList.innerHTML;
+reportMed.innerHTML=medList.innerHTML;
+reportLab.innerHTML=labList.innerHTML;
+drawChart();
+}
+
+function drawChart(){
+const c=document.getElementById("chart");
+const ctx=c.getContext("2d");
+ctx.clearRect(0,0,c.width,c.height);
+ctx.font="14px Arial";
+ctx.fillStyle="#526477";
+if(!bp.length){ctx.fillText("Your readings will appear here.",15,35);return;}
+let data=[...bp].sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(-15);
+let max=Math.max(180,...data.map(x=>x.s));
+let min=40;
+function y(v){return 205-(v-min)/(max-min)*175;}
+ctx.strokeStyle="#d8e0e7";
+for(let v=50;v<=max;v+=25){
+ctx.beginPath();ctx.moveTo(40,y(v));ctx.lineTo(585,y(v));ctx.stroke();
+ctx.fillText(v,5,y(v)+4);
+}
+function line(field,color){
+ctx.strokeStyle=color;ctx.lineWidth=3;ctx.beginPath();
+data.forEach((x,i)=>{
+let px=45+i*540/Math.max(1,data.length-1);
+if(i===0)ctx.moveTo(px,y(x[field]));else ctx.lineTo(px,y(x[field]));
+});
+ctx.stroke();
+data.forEach((x,i)=>{
+ctx.fillStyle=color;ctx.beginPath();
+ctx.arc(45+i*540/Math.max(1,data.length-1),y(x[field]),4,0,Math.PI*2);ctx.fill();
+});
+}
+line("s","#176b70");
+line("d","#e58b37");
+ctx.fillStyle="#176b70";ctx.fillText("Systolic",45,15);
+ctx.fillStyle="#e58b37";ctx.fillText("Diastolic",125,15);
+}
+render();
+</script>
+</body>
+</html>
